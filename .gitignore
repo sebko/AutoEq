@@ -106,6 +106,7 @@ my_data/
 my-data/
 my_results/
 my-results/
+swinsian_out/
 **/images
 **/inspection
 **/pdf
