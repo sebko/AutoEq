@@ -12,8 +12,15 @@ from swinsian import augraphiceq as au  # noqa: E402
 from swinsian.config import load_band_config  # noqa: E402
 
 
+CAPTURED_STATE = Path(__file__).parent / 'data' / 'swinsian_equalizer_manual_settings.plist'
+
+
 def _live_manual_settings():
-    """Swinsian's current 'manual' equalizer state, or None if Swinsian was never launched."""
+    """Swinsian's current 'manual' equalizer state.
+
+    Absent whenever a named preset is active rather than manual settings, so this is a bonus
+    check on top of the captured fixture, never the only one.
+    """
     result = subprocess.run(
         ['/usr/bin/defaults', 'export', 'com.swinsian.Swinsian', '-'],
         capture_output=True)
@@ -23,11 +30,19 @@ def _live_manual_settings():
     return domain.get('EqualizerManualSettings')
 
 
-def test_reencodes_live_swinsian_state_byte_for_byte():
-    """The decisive proof of the blob layout: rebuild Swinsian's own state and compare bytes."""
-    data = _live_manual_settings()
-    if data is None:
-        pytest.skip('Swinsian preferences are not present on this machine')
+@pytest.mark.parametrize('source', ['captured', 'live'])
+def test_reencodes_swinsian_written_state_byte_for_byte(source):
+    """The decisive proof of the blob layout: rebuild state Swinsian wrote and compare bytes.
+
+    The fixture is a real payload captured from Swinsian 3.0.8, so this holds without Swinsian
+    installed; the live variant additionally catches a format change in a future version.
+    """
+    if source == 'captured':
+        data = CAPTURED_STATE.read_bytes()
+    else:
+        data = _live_manual_settings()
+        if data is None:
+            pytest.skip('Swinsian is currently using a named preset, not manual settings')
     classinfo = au.parse_classinfo(data)
     blob = classinfo['data']
     params = au.decode_param_blob(blob)

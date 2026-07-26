@@ -9,7 +9,7 @@ from autoeq.frequency_response import FrequencyResponse
 
 from .augraphiceq import GAIN_MAX, GAIN_MIN, ISO_CENTERS_31
 from .config import load_band_config
-from .tiers import BASS_BOOST_FC, BASS_BOOST_Q, Tier
+from .tiers import Tier
 
 CLIP_EPSILON = 0.05  # dB from a rail before a band counts as clipped
 DEFAULT_GAIN_RANGE = 3.0  # dB a band may stray from the ideal curve at its own centre
@@ -107,7 +107,7 @@ def fit_measurement(
         tier: Tier,
         target_path: Path = DEFAULT_TARGET,
         headroom: float = 0.2,
-        normalize: str = 'peak',
+        normalize: str = 'auto',
         max_gain: Optional[float] = None,
         fs: int = 44100,
         refit: bool = False,
@@ -132,8 +132,8 @@ def fit_measurement(
         target=target,
         min_mean_error=True,
         bass_boost_gain=tier.bass_gain,
-        bass_boost_fc=BASS_BOOST_FC,
-        bass_boost_q=BASS_BOOST_Q,
+        bass_boost_fc=tier.bass_fc,
+        bass_boost_q=tier.bass_q,
         max_gain=tier.max_gain if max_gain is None else max_gain,
         fs=fs,
         **process_kwargs)
@@ -143,9 +143,13 @@ def fit_measurement(
     ideal_at_bands = _interpolate_at_bands(fr.frequency, fr.equalization + offset)
     gains = _optimize(fr, offset, fs, ideal_at_bands, gain_range)
     if refit and normalize != 'none':
+        # Correct the fit overshooting the level the offset intended, not the offset itself:
+        # under 'auto' the intended peak is deliberately above unity, and comparing against
+        # -headroom here would undo that and drive the deepest cuts into the floor.
+        intended_peak = max(ideal_at_bands)
         realized = float(np.max(fr.fixed_band_eq))
-        if realized > -headroom + CLIP_EPSILON:
-            offset -= realized + headroom
+        if realized > intended_peak + CLIP_EPSILON:
+            offset -= realized - intended_peak
             ideal_at_bands = _interpolate_at_bands(fr.frequency, fr.equalization + offset)
             gains = _optimize(fr, offset, fs, ideal_at_bands, gain_range)
 
@@ -184,7 +188,9 @@ def _level_offset(fr: FrequencyResponse, normalize: str, headroom: float) -> flo
     no_boost = -(highest + headroom)
     if normalize == 'peak':
         return no_boost
-    off_the_floor = GAIN_MIN - lowest
+    # The epsilon keeps the deepest band just clear of the floor rather than exactly on it, so it
+    # is not reported as clipped on optimizer noise alone.
+    off_the_floor = GAIN_MIN + CLIP_EPSILON - lowest
     # Never shift further up than the ceiling allows, even if the floor still clips.
     return min(max(no_boost, off_the_floor), GAIN_MAX - highest)
 

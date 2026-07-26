@@ -54,16 +54,22 @@ def launch_app() -> None:
     subprocess.run(['/usr/bin/open', '-a', 'Swinsian'], check=True)
 
 
-def export_domain() -> Dict[str, Any]:
+def _defaults(*command: str, stdin: bytes = None) -> bytes:
+    """Run `defaults`, surfacing its stderr instead of hiding it in a CalledProcessError."""
     result = subprocess.run(
-        ['/usr/bin/defaults', 'export', DOMAIN, '-'], capture_output=True, check=True)
-    return plistlib.loads(result.stdout)
+        ['/usr/bin/defaults', *command], input=stdin, capture_output=True)
+    if result.returncode != 0:
+        detail = result.stderr.decode(errors='replace').strip() or 'no error output'
+        raise RuntimeError(f'`defaults {" ".join(command)}` failed: {detail}')
+    return result.stdout
+
+
+def export_domain() -> Dict[str, Any]:
+    return plistlib.loads(_defaults('export', DOMAIN, '-'))
 
 
 def import_domain(domain: Dict[str, Any]) -> None:
-    subprocess.run(
-        ['/usr/bin/defaults', 'import', DOMAIN, '-'],
-        input=plistlib.dumps(domain, fmt=plistlib.FMT_XML), capture_output=True, check=True)
+    _defaults('import', DOMAIN, '-', stdin=plistlib.dumps(domain, fmt=plistlib.FMT_XML))
 
 
 def backup(dest_dir: Path) -> Tuple[Path, Path]:
@@ -72,9 +78,7 @@ def backup(dest_dir: Path) -> Tuple[Path, Path]:
     stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
 
     xml_path = dest_dir / f'{stamp}.xml'
-    result = subprocess.run(
-        ['/usr/bin/defaults', 'export', DOMAIN, '-'], capture_output=True, check=True)
-    xml_path.write_bytes(result.stdout)
+    xml_path.write_bytes(_defaults('export', DOMAIN, '-'))
 
     plist_path = dest_dir / f'{stamp}.plist'
     if PLIST_PATH.exists():
@@ -83,10 +87,13 @@ def backup(dest_dir: Path) -> Tuple[Path, Path]:
     return xml_path, plist_path
 
 
-def restore(backup_xml: Path) -> None:
+def restore(backup_xml: Path, backup_dir: Path = None) -> None:
     if is_running():
         raise SwinsianRunning('Quit Swinsian before restoring its preferences.')
-    subprocess.run(['/usr/bin/defaults', 'import', DOMAIN, str(backup_xml)], check=True)
+    if backup_dir is not None:
+        # Restoring the wrong file would otherwise discard the current state irrecoverably.
+        backup(backup_dir)
+    _defaults('import', DOMAIN, str(backup_xml))
 
 
 def read_presets() -> Dict[str, bytes]:

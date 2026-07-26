@@ -48,7 +48,8 @@ the exact preset payload per tier, plus a `SUMMARY.md`.
 | `heavy` | 12 dB |
 | `max` | 18 dB |
 
-`--bass-boost GAIN` (repeatable) replaces the tiers with ad hoc values.
+`--bass-boost GAIN[,FC[,Q]]` (repeatable) replaces the tiers with ad hoc shelves, e.g.
+`--bass-boost 9.5,150,0.69`. Centre frequency defaults to 105 Hz and Q to 0.7.
 
 ## The two things that will bite you
 
@@ -77,7 +78,7 @@ which you recover by lowering Swinsian's volume. `--normalize peak` never boosts
 clipped bands; `--normalize none` applies no shift at all and needs `--i-know-this-clips`.
 
 Bands that still land on a rail are listed in each preset's report and make the tool exit non-zero
-unless `--allow-clipping`.
+unless `--allow-clipping`. The check runs before installing, so a refused run writes nothing.
 
 ## Why bands are bounded to the curve
 

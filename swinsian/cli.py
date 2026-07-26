@@ -36,8 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
     tone.add_argument('--tiers', default='all',
                       help='comma separated tier keys, or "all" (default). '
                            f'Available: {", ".join(t.key for t in TIERS)}')
-    tone.add_argument('--bass-boost', action='append', metavar='GAIN',
-                      help='ad hoc bass shelf gain in dB; repeatable, overrides --tiers')
+    tone.add_argument('--bass-boost', action='append', metavar='GAIN[,FC[,Q]]',
+                      help='ad hoc bass shelf as gain in dB, optionally with centre frequency and '
+                           'Q; repeatable, overrides --tiers')
     tone.add_argument('--max-gain', type=float, help='override the per tier max gain')
     tone.add_argument('--tilt', type=float, default=0.0)
     tone.add_argument('--treble-boost', type=float, default=0.0, dest='treble_boost_gain')
@@ -80,10 +81,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.restore:
-        prefs.restore(args.restore)
+        try:
+            prefs.restore(args.restore, backup_dir=args.backup_dir or (args.out_dir / 'backups'))
+        except prefs.SwinsianRunning as err:
+            print(f'error: {err}', file=sys.stderr)
+            return 2
         print(f'Restored {prefs.DOMAIN} from {args.restore}')
         return 0
 
@@ -97,10 +103,10 @@ def main(argv: Sequence[str] = None) -> int:
         return 0
 
     if not args.measurements:
-        build_parser().error('at least one MEASUREMENT is required (or use --list)')
+        parser.error('at least one MEASUREMENT is required (or use --list)')
 
     if args.normalize == 'none' and not args.i_know_this_clips:
-        build_parser().error(
+        parser.error(
             '--normalize=none leaves positive band gains that will clip digitally; '
             'pass --i-know-this-clips to accept that')
 
@@ -111,8 +117,11 @@ def main(argv: Sequence[str] = None) -> int:
         print(f'error: {err}', file=sys.stderr)
         return 2
 
-    tiers = ([ad_hoc_tier(spec) for spec in args.bass_boost] if args.bass_boost
-             else list(resolve_tiers(args.tiers.split(','))))
+    try:
+        tiers = ([ad_hoc_tier(spec) for spec in args.bass_boost] if args.bass_boost
+                 else list(resolve_tiers(args.tiers.split(','))))
+    except ValueError as err:
+        parser.error(str(err))
 
     short_names = args.short_name or []
     fits: List[Fit] = []
@@ -138,14 +147,19 @@ def main(argv: Sequence[str] = None) -> int:
     write_artifacts(fits, names, args.out_dir)
     print_summary(fits, names)
 
-    if args.install:
-        install_presets(fits, names, args)
-
     clipped_total = sum(len(fit.clipped) for fit in fits)
     if clipped_total and not args.allow_clipping:
-        print(f'\n{clipped_total} band(s) hit the audio unit rails. '
-              'Pass --allow-clipping to accept this.', file=sys.stderr)
+        # Gate before installing, so the message is never about presets already written.
+        print(f'\n{clipped_total} band(s) hit the audio unit rails. Nothing was installed; '
+              'pass --allow-clipping to accept this.', file=sys.stderr)
         return 1
+
+    if args.install:
+        try:
+            install_presets(fits, names, args)
+        except prefs.SwinsianRunning as err:
+            print(f'error: {err}', file=sys.stderr)
+            return 2
     return 0
 
 
