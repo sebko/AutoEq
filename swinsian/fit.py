@@ -228,7 +228,7 @@ def preset_name(measurement_path: Path, tier: Tier, index: int, template: str,
 
 def short_model_name(stem: str) -> str:
     """Trim a measurement filename down to something that fits a preset menu."""
-    name = re.sub(r'^(Apple|Beyerdynamic|Sennheiser|Audio-Technica|AKG|Sony|Bose|Focal)\s+', '',
+    name = re.sub(r'^(Apple|Audeze|Beyerdynamic|Sennheiser|Audio-Technica|AKG|Sony|Bose|Focal)\s+', '',
                   stem)
     name = re.sub(r'\s*\(([^)]*)earpads\)', lambda m: f' {m.group(1).strip()}', name)
     return re.sub(r'\s+', ' ', name).strip()

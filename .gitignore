@@ -124,3 +124,4 @@ webapp/data/*
 !webapp/data/targets.json
 !webapp/data/targets.json
 dbtools/google-image-search/
+.DS_Store
