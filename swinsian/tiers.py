@@ -1,10 +1,14 @@
 """Bass boost tiers.
 
-Each tier reconstitutes the Harman over-ear 2018 bass shelf at a different strength. The
-reference tier is AutoEq's own value; the rest step up from there.
+Each tier reconstitutes a "without bass" target's bass shelf at a different strength. The
+reference tier is AutoEq's own value for that target; the rest step up from there by fixed amounts,
+so the same tier means the same deviation from reference on over-ear and in-ear targets alike.
 """
 
+from pathlib import Path
 from typing import NamedTuple, Sequence
+
+from autoeq.constants import DEFAULT_BASS_BOOST_GAINS
 
 BASS_BOOST_FC = 105.0
 BASS_BOOST_Q = 0.7
@@ -29,23 +33,35 @@ class Tier(NamedTuple):
 
 
 TIERS = (
-    Tier('harman', 'Harman', 6.0, 'AutoEq reference bass shelf'),
-    Tier('warm', 'Warm', 9.0, '+3 dB, roughly one standard deviation of listener preference'),
-    Tier('heavy', 'Heavy', 12.0, '+6 dB, top of the bass preferring cluster'),
-    Tier('max', 'MAX', 18.0, '+12 dB, at the audio unit\'s structural ceiling; treble bands clip'),
+    Tier('harman', 'Harman', 0.0, 'AutoEq reference bass shelf'),
+    Tier('warm', 'Warm', 3.0, '+3 dB, roughly one standard deviation of listener preference'),
+    Tier('heavy', 'Heavy', 6.0, '+6 dB, top of the bass preferring cluster'),
+    Tier('max', 'MAX', 12.0, '+12 dB, deliberately extreme'),
 )
 
 TIERS_BY_KEY = {tier.key: tier for tier in TIERS}
 
 
-def resolve_tiers(keys: Sequence[str]) -> Sequence[Tier]:
+def reference_bass_gain(target_path: Path) -> float:
+    try:
+        return DEFAULT_BASS_BOOST_GAINS[target_path.stem]
+    except KeyError:
+        raise ValueError(
+            f'AutoEq has no reference bass shelf for target {target_path.stem!r}; '
+            'use --bass-boost instead of tiers')
+
+
+def resolve_tiers(keys: Sequence[str], target_path: Path) -> Sequence[Tier]:
+    """Resolve tier keys to absolute shelves, the TIERS gains being offsets from the reference."""
     if len(keys) == 1 and keys[0] == 'all':
-        return TIERS
+        keys = [tier.key for tier in TIERS]
     unknown = [key for key in keys if key not in TIERS_BY_KEY]
     if unknown:
         raise ValueError(
             f'unknown tier(s) {unknown}; choose from {sorted(TIERS_BY_KEY)} or "all"')
-    return tuple(TIERS_BY_KEY[key] for key in keys)
+    reference = reference_bass_gain(target_path)
+    return tuple(TIERS_BY_KEY[key]._replace(bass_gain=reference + TIERS_BY_KEY[key].bass_gain)
+                 for key in keys)
 
 
 def ad_hoc_tier(spec: str) -> Tier:

@@ -36,17 +36,35 @@ usually means `/usr/bin/python3`; a Homebrew or mise Python 3.12+ will fail to b
 .venv/bin/python -m swinsian --restore swinsian_out/backups/<timestamp>.xml
 ```
 
+### Measurements from outside the database
+
+`swinsian/measurements/` holds measurements AutoEq doesn't have yet, as AutoEq CSVs. Pass the path
+and the target that suits the rig. In-ear measurements need `--target`, because the default target
+is over-ear:
+
+```bash
+.venv/bin/python -m swinsian "swinsian/measurements/Beyerdynamic DT 30 IE.csv" \
+    --target "targets/AutoEq in-ear.csv" --install --quit-swinsian --verify --relaunch
+```
+
+| File | Source |
+| --- | --- |
+| `Beyerdynamic DT 30 IE.csv` | [Hawaii Bad Boy's squig.link](https://hbb.squig.link), right channel only (no left published), fetched 2026-09-15 |
+
 Nothing touches Swinsian without `--install`. Each run writes a PNG, a band table, a gains CSV and
 the exact preset payload per tier, plus a `SUMMARY.md`.
 
 ### Bass tiers
 
-| Tier | Shelf @ 105 Hz |
-| --- | --- |
-| `harman` | 6 dB — AutoEq's own reference value |
-| `warm` | 9 dB |
-| `heavy` | 12 dB |
-| `max` | 18 dB |
+Tiers step up from AutoEq's reference shelf for the chosen target, so they mean the same thing on
+over-ear and in-ear targets. A target AutoEq has no reference value for needs `--bass-boost`.
+
+| Tier | Shelf @ 105 Hz | Harman over-ear 2018 (default) | AutoEq in-ear |
+| --- | --- | --- | --- |
+| `harman` | reference | 6 dB | 8 dB |
+| `warm` | +3 dB | 9 dB | 11 dB |
+| `heavy` | +6 dB | 12 dB | 14 dB |
+| `max` | +12 dB | 18 dB | 20 dB |
 
 `--bass-boost GAIN[,FC[,Q]]` (repeatable) replaces the tiers with ad hoc shelves, e.g.
 `--bass-boost 9.5,150,0.69`. Centre frequency defaults to 105 Hz and Q to 0.7.

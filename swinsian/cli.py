@@ -119,7 +119,7 @@ def main(argv: Sequence[str] = None) -> int:
 
     try:
         tiers = ([ad_hoc_tier(spec) for spec in args.bass_boost] if args.bass_boost
-                 else list(resolve_tiers(args.tiers.split(','))))
+                 else list(resolve_tiers(args.tiers.split(','), args.target)))
     except ValueError as err:
         parser.error(str(err))
 
